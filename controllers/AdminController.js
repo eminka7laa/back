@@ -1,5 +1,59 @@
 const connection = require("../config/connect");
+const bcrypt = require('bcrypt');
 
+
+const registerAdmin = async (req, res) => {
+  const { email, password, nom, prenom } = req.body;
+
+  if (!email || !password || !nom || !prenom) {
+    return res.status(400).json({ error: 'Tous les champs sont requis : email, password, nom, prenom.' });
+  }
+
+  // Vérifier si l'email existe déjà
+  connection.query('SELECT * FROM admin WHERE email = ?', [email], async (err, result) => {
+    if (err) {
+      console.error('Erreur base de données :', err);
+      return res.status(500).json({ error: 'Erreur interne', details: err });
+    }
+
+    if (result.length > 0) {
+      return res.status(409).json({ error: 'Un compte avec cet email existe déjà.' });
+    }
+
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const query = `
+        INSERT INTO admin (email, password, nom, prenom)
+        VALUES (?, ?, ?, ?)
+      `;
+
+      connection.query(query, [email, hashedPassword, nom, prenom], (errInsert, resultInsert) => {
+        if (errInsert) {
+          console.error('Erreur insertion admin :', errInsert);
+          return res.status(500).json({ error: 'Erreur lors de la création du compte', details: errInsert });
+        }
+
+        // Crée une date actuelle au format YYYY-MM-DD
+        const dateCreation = new Date().toISOString().split('T')[0];
+
+        res.status(201).json({
+          message: 'Administrateur enregistré avec succès.',
+          admin: {
+            id: resultInsert.insertId,
+            email,
+            nom,
+            prenom,
+            datecreation: dateCreation
+          }
+        });
+      });
+    } catch (err) {
+      console.error('Erreur lors du hash du mot de passe :', err);
+      res.status(500).json({ error: 'Erreur interne' });
+    }
+  });
+};
 // Contrôleur de connexion admin
 const Login = async (req, res) => {
     const { email, password } = req.body;
@@ -27,17 +81,20 @@ const Login = async (req, res) => {
     });
 };
 
+
+
 // Contrôleur d'ajout de note
 const addNote = (req, res) => {
-  const { matiere, note, trimestre } = req.body;
-  const idelv = req.params.id;
+  const { idelv, matiere, note, trimestre, remarque } = req.body;
 
-  if (!idelv || !matiere || !note || !trimestre) {
-    return res.status(400).json({ error: 'Tous les champs idelv, matiere, note et trimestre sont requis.' });
+  if (!idelv || !matiere || note === undefined || !trimestre) {
+    return res.status(400).json({
+      error: 'Tous les champs idelv, matiere, note et trimestre sont requis.'
+    });
   }
 
-  if (isNaN(note) || isNaN(matiere)) {
-    return res.status(400).json({ error: 'matiere et note doivent être des nombres.' });
+  if (isNaN(note)) {
+    return res.status(400).json({ error: 'La note doit être un nombre.' });
   }
 
   // Vérifier que l'élève existe
@@ -46,32 +103,41 @@ const addNote = (req, res) => {
       console.error('Erreur vérification élève:', err);
       return res.status(500).json({ error: 'Erreur base de données', details: err });
     }
+
     if (eleves.length === 0) {
       return res.status(404).json({ error: `Élève avec numinscri ${idelv} non trouvé.` });
     }
 
-    // Vérifier que la matière existe
-    connection.query('SELECT * FROM matiere WHERE id = ?', [matiere], (errMat, matieres) => {
+    // Vérifier que la matière existe (par nom)
+    connection.query('SELECT * FROM matiere WHERE nom = ?', [matiere], (errMat, matieres) => {
       if (errMat) {
         console.error('Erreur vérification matière:', errMat);
         return res.status(500).json({ error: 'Erreur base de données', details: errMat });
       }
+
       if (matieres.length === 0) {
-        return res.status(404).json({ error: `Matière avec id ${matiere} non trouvée.` });
+        return res.status(404).json({ error: `Matière "${matiere}" non trouvée.` });
       }
 
+      const idmat = matieres[0].id;
+
       // Insertion de la note
-      const query = 'INSERT INTO note (idelv, idmat, notemat, trimestre) VALUES (?, ?, ?, ?)';
-      connection.query(query, [idelv, matiere, note, trimestre], (errInsert, result) => {
+      const query = 'INSERT INTO note (idelv, idmat, notemat, trimestre, remarque) VALUES (?, ?, ?, ?, ?)';
+      connection.query(query, [idelv, idmat, note, trimestre, remarque], (errInsert, result) => {
         if (errInsert) {
           console.error('Erreur insertion note:', errInsert);
           return res.status(500).json({ error: 'Erreur lors de l\'ajout de la note', details: errInsert });
         }
-        res.status(201).json({ id: result.insertId, message: 'Note ajoutée avec succès' });
+
+        res.status(201).json({
+          id: result.insertId,
+          message: 'Note ajoutée avec succès'
+        });
       });
     });
   });
 };
+
 
 
 const getNotesByEleve = (req, res) => {
@@ -360,6 +426,49 @@ const deleteAbsence = (req, res) => {
   });
 };
 
+const getAllAbsences = (req, res) => {
+  const query = `
+    SELECT 
+      a.id,
+      a.ideleve,
+      e.nom,
+      e.prenom,
+      a.typeabsence,
+      a.causeabsence,
+      a.datedeb,
+      a.datefin,
+      a.nbrjrs
+    FROM absence a
+    JOIN eleve e ON a.ideleve = e.numinscri
+    ORDER BY a.datedeb DESC
+  `;
+
+  connection.query(query, (err, results) => {
+    if (err) {
+      console.error('Erreur lors de la récupération des absences :', err);
+      return res.status(500).json({ error: 'Erreur base de données', details: err });
+    }
+
+    const formatDate = (date) => {
+      const d = new Date(date);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
+
+    const absences = results.map(abs => ({
+      ...abs,
+      datedeb: formatDate(abs.datedeb),
+      datefin: formatDate(abs.datefin)
+    }));
+
+    res.status(200).json({ absences });
+  });
+};
+
+
+
 
 
 module.exports = {
@@ -374,5 +483,8 @@ module.exports = {
     getNotesByEleve,
     GetAllEleve,
     addAbsence,
-    deleteAbsence
+    deleteAbsence,
+    getAllAbsences,
+    registerAdmin
+
 };

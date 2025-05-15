@@ -4,11 +4,13 @@ const {
     GetAllEleve,
     Login,
     getSanction,
-    getGrades
+    getGrades,
+    getAbsence
 } = require('../controllers/eleveController');
 
 // Student routes
-router.get('/eleve/:numinscri', getSanction);
+router.get('/eleve/sanction/:numinscri', getSanction);
 router.post('/eleve/login', Login)
 router.get('/eleve/notes/:numinscri',getGrades)
+router.get('/eleve/absence/:numinscri',getAbsence );
 module.exports = router; 

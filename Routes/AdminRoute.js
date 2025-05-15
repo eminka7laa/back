@@ -12,7 +12,9 @@ const {
     getNotesByEleve,
     GetAllEleve,
     addAbsence,
-    deleteAbsence
+    deleteAbsence,
+    getAllAbsences,
+    registerAdmin
 } = require('../controllers/AdminController');
 
 // Student routes
@@ -28,6 +30,9 @@ router.get('/admin/notes/:id', getNotesByEleve);
 router.get('/admin',GetAllEleve)
 router.post('/admin/absence',addAbsence)
 router.delete("/admin/absence/:id",deleteAbsence)
+router.get("/admin/absences",getAllAbsences)
+router.post("/admin/register",registerAdmin)
+
 
 
 
