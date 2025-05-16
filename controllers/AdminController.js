@@ -55,30 +55,46 @@ const registerAdmin = async (req, res) => {
   });
 };
 // Contrôleur de connexion admin
-const Login = async (req, res) => {
-    const { email, password } = req.body;
+const Login = (req, res) => {
+  const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).send({ msg: 'Email et mot de passe requis' });
+  if (!email || !password) {
+    return res.status(400).send({ msg: 'Email et mot de passe requis' });
+  }
+
+  connection.query('SELECT * FROM admin WHERE email = ?', [email], (error, data) => {
+    if (error) {
+      console.error(error);
+      return res.status(500).send({ msg: 'Erreur lors de la récupération des données' });
     }
 
-    connection.query('SELECT * FROM admin WHERE email = ?', [email], (error, data) => {
-        if (error) {
-            console.error(error);
-            return res.status(500).send({ msg: 'Erreur lors de la récupération des données' });
-        }
+    if (data.length === 0) {
+      return res.status(404).send({ msg: 'L\'utilisateur n\'existe pas' });
+    }
 
-        if (data.length === 0) {
-            return res.status(404).send({ msg: 'L\'utilisateur n\'existe pas' });
-        }
+    const user = data[0];
 
-        const user = data[0];
-        if (user.mdp !== password) {
-            return res.status(401).send({ msg: 'Mot de passe incorrect' });
-        }
+    // Comparaison sécurisée avec bcrypt
+    bcrypt.compare(password, user.password, (err, isMatch) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).send({ msg: 'Erreur serveur' });
+      }
 
-        res.status(200).send({ msg: 'Bienvenue', user: user, nom: user.nom });
+      if (!isMatch) {
+        return res.status(401).send({ msg: 'Mot de passe incorrect' });
+      }
+
+      // On ne renvoie pas le mot de passe dans la réponse
+      const { password, ...userData } = user;
+
+      res.status(200).send({
+        msg: 'Bienvenue',
+        user: userData,
+        nom: userData.nom,
+      });
     });
+  });
 };
 
 
@@ -258,6 +274,75 @@ const deleteEleve = (req, res) => {
     res.status(200).json({ message: "Élève supprimé avec succès." });
   });
 };
+const updateEleve = (req, res) => {
+  const { numinscri } = req.params;
+  const {
+    nom,
+    prenom,
+    nompere,
+    nommere,
+    datenais,
+    numtel,
+    classe,
+    etablisement,
+    gouver,
+    dre
+  } = req.body;
+
+  if (!numinscri) {
+    return res.status(400).json({ error: "Le numéro d'inscription est requis." });
+  }
+
+  // Ici on peut ajouter une validation des champs (optionnel)
+  if (
+    !nom || !prenom || !nompere || !nommere ||
+    !datenais || !numtel || !classe || !etablisement || !gouver || !dre
+  ) {
+    return res.status(400).json({ error: "Tous les champs sont requis." });
+  }
+
+  const query = `
+    UPDATE eleve SET
+      nom = ?,
+      prenom = ?,
+      nompere = ?,
+      nommere = ?,
+      datenais = ?,
+      numtel = ?,
+      classe = ?,
+      etablisement = ?,
+      gouver = ?,
+      dre = ?
+    WHERE numinscri = ?
+  `;
+
+  const values = [
+    nom,
+    prenom,
+    nompere,
+    nommere,
+    datenais,
+    numtel,
+    classe,
+    etablisement,
+    gouver,
+    dre,
+    numinscri
+  ];
+
+  connection.query(query, values, (err, result) => {
+    if (err) {
+      console.error("Erreur lors de la mise à jour de l'élève :", err);
+      return res.status(500).json({ error: "Erreur base de données", details: err });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Aucun élève trouvé avec ce numéro d'inscription." });
+    }
+
+    res.status(200).json({ message: "Élève mis à jour avec succès." });
+  });
+};
 
 const addMatiere = (req, res) => {
   const { nom, coef } = req.body;
@@ -371,6 +456,31 @@ const GetAllEleve = (req, res) => {
     res.send({ results: data });
   });
 };
+const getElevesCount = (req, res) => {
+  const query = "SELECT COUNT(*) AS total FROM eleve";
+
+  connection.query(query, (error, results) => {
+    if (error) {
+      res.status(500).send("Erreur lors du comptage des élèves");
+      return;
+    }
+
+    res.send({ totalEleves: results[0].total });
+  });
+};
+
+const getAbncesCount = (req, res) => {
+  const query = "SELECT COUNT(*) AS total FROM absence";
+
+  connection.query(query, (error, results) => {
+    if (error) {
+      res.status(500).send("Erreur lors du comptage des absences");
+      return;
+    }
+
+    res.send({ tolalAbsences: results[0].total });
+  });
+};
 
 const addAbsence = (req, res) => {
   const { ideleve, typeabsence, causeabsence, datedeb, datefin, nbrjrs } = req.body;
@@ -426,6 +536,44 @@ const deleteAbsence = (req, res) => {
   });
 };
 
+
+const updateAbsence = (req, res) => {
+  const id = req.params.id;
+  const { ideleve, typeabsence, causeabsence, datedeb, datefin, nbrjrs } = req.body;
+
+  // Vérifier que l'id est fourni
+  if (!id) {
+    return res.status(400).json({ error: "L'id de l'absence est requis." });
+  }
+
+  // Vérifier que tous les champs nécessaires sont présents
+  if (!ideleve || !typeabsence || !causeabsence || !datedeb || !datefin || !nbrjrs) {
+    return res.status(400).json({ error: "Tous les champs sont requis." });
+  }
+
+  const query = `
+    UPDATE absence
+    SET ideleve = ?, typeabsence = ?, causeabsence = ?, datedeb = ?, datefin = ?, nbrjrs = ?
+    WHERE id = ?
+  `;
+
+  const values = [ideleve, typeabsence, causeabsence, datedeb, datefin, nbrjrs, id];
+
+  connection.query(query, values, (err, result) => {
+    if (err) {
+      console.error("Erreur lors de la modification de l'absence :", err);
+      return res.status(500).json({ error: "Erreur base de données", details: err });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Absence non trouvée." });
+    }
+
+    res.status(200).json({ message: "Absence modifiée avec succès." });
+  });
+};
+
+
 const getAllAbsences = (req, res) => {
   const query = `
     SELECT 
@@ -468,6 +616,16 @@ const getAllAbsences = (req, res) => {
 };
 
 
+const getAllNotes = (req,res) => {
+   const query = `
+    SELECT 
+     *
+    FROM absence a
+    JOIN eleve e ON a.ideleve = e.numinscri
+    ORDER BY a.datedeb DESC
+  `;
+}
+
 
 
 
@@ -485,6 +643,10 @@ module.exports = {
     addAbsence,
     deleteAbsence,
     getAllAbsences,
-    registerAdmin
+    registerAdmin,
+    updateEleve,
+    updateAbsence,
+    getElevesCount,
+    getAbncesCount
 
 };

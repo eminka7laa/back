@@ -14,27 +14,36 @@ const {
     addAbsence,
     deleteAbsence,
     getAllAbsences,
-    registerAdmin
+    registerAdmin,
+    updateEleve,
+    updateAbsence,
+    getElevesCount,
+    getAbncesCount
 } = require('../controllers/AdminController');
 
 // Student routes
 router.post('/admin/notes/:id', addNote);
 router.post('/admin/login', Login)
-router.post("/admin/eleve",addEleve)
-router.delete("/admin/eleves/:numinscri", deleteEleve);
+router.post("/admin/eleve/add",addEleve)
 router.post("/admin/matiere",addMatiere);
-router.delete("/admin/matieres/:id", deleteMatiere);
 router.post("/admin/sanctions/:numinscri", addSanction);
-router.delete("/admin/sanctions/:numinscri", deleteSanction);
-router.get('/admin/notes/:id', getNotesByEleve);
-router.get('/admin',GetAllEleve)
 router.post('/admin/absence',addAbsence)
-router.delete("/admin/absence/:id",deleteAbsence)
-router.get("/admin/absences",getAllAbsences)
 router.post("/admin/register",registerAdmin)
 
 
+router.delete("/admin/eleves/:numinscri", deleteEleve);
+router.delete("/admin/matieres/:id", deleteMatiere);
+router.delete("/admin/sanctions/:numinscri", deleteSanction);
+router.delete("/admin/absence/:id",deleteAbsence)
 
+router.get('/admin/notes/:id', getNotesByEleve);
+router.get('/admin/all',GetAllEleve)
+router.get("/admin/absences",getAllAbsences)
+router.get("/admin/eleves/count",getElevesCount)
+router.get("/admin/absences/count",getAbncesCount)
+
+router.put('/admin/eleve/update/:numinscri',updateEleve)
+router.put('/admin/absence/:id', updateAbsence)
 
 
 module.exports = router; 
